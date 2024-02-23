@@ -1,0 +1,30 @@
+#root {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100vh;
+}
+.mb {
+  margin-bottom: 16px;
+}
+.ml {
+  margin-left: 16px;
+}
+.mr {
+  margin-right: 16px;
+}
+.mt {
+  margin-top: 16px;
+}
+.column {
+  flex-direction: column;
+}
+.row {
+  flex-direction: row;
+}
+.flex {
+  display: flex;
+}
+.hidden {
+  display: none;
+}
