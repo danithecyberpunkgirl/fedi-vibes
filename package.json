@@ -1,0 +1,22 @@
+{
+  "name": "fediverse-vibes",
+  "version": "1.0.0",
+  "description": "ActivityPub Notifications to Sex Toy Vibes",
+  "main": "server.js",
+  "scripts": {
+    "start": "node ./server.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/danithecyberpunkgirl/fediverse-vibes.git"
+  },
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/danithecyberpunkgirl/fediverse-vibes/issues"
+  },
+  "homepage": "https://github.com/danithecyberpunkgirl/fediverse-vibes#readme",
+  "dependencies": {
+    "express": "^4.18.2"
+  }
+}

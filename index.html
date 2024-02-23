@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>Fedi Vibes</title>
+    <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+    <script src="https://api.lovense-api.com/basic-sdk/core.min.js"></script>
+    <style>
+      #root {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        height: 100vh;
+      }
+      .appWrapper {
+        display: flex;
+        flex-direction: column;
+        align-items: start;
+        justify-content: center;
+        height: 100vh;
+        width: 20vw;
+      }
+      .mb {
+        margin-bottom: 16px;
+      }
+      .ml {
+        margin-left: 16px;
+      }
+      .mr {
+        margin-right: 16px;
+      }
+      .mt {
+        margin-top: 16px;
+      }
+      .column {
+        flex-direction: column;
+      }
+      .row {
+        flex-direction: row;
+      }
+      .flex {
+        display: flex;
+      }
+      .hidden {
+        display: none;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="root">
+      <div class="appWrapper">
+        <div id="lovenseConnectionSetup" class="flex column">
+          <div class="flex column">
+            <input
+              id="lovenseApiToken"
+              class="mb"
+              type="text"
+              placeholder="lovense developer token"
+            />
+            <input
+              id="lovensePlatformId"
+              class="mb"
+              type="text"
+              placeholder="lovense platform name"
+            />
+            <input
+              id="lovenseUsername"
+              class="mb"
+              type="text"
+              placeholder="lovense username"
+            />
+            <div class="flex row">
+              <button id="lovenseSubmit">Init Lovense API</button>
+              <div id="lovenseConnectionStatus" class="ml">?</div>
+            </div>
+          </div>
+          <div class="flex column mt">
+            <button id="lovenseGetQrCode">Get QR Code</button>
+            <div id="qrHelpText" class="hidden">
+              Scan QR Code from Lovense App
+            </div>
+            <p>
+              <img id="lovenseQrCode" alt="" />
+            </p>
+          </div>
+        </div>
+        <div id="infoBox">
+          <div id="appConnectionStatus" class="mt">?</div>
+          <button id="sendVibes" disabled>Send Vibes</button>
+        </div>
+      </div>
+    </div>
+    <script>
+      const lovenseConnectionSetup = document.getElementById(
+        "lovenseConnectionSetup"
+      );
+      const apiTokenField = document.getElementById("lovenseApiToken");
+      const platformField = document.getElementById("lovensePlatformId");
+      const usernameField = document.getElementById("lovenseUsername");
+      const lovenseConnectionStatus = document.getElementById(
+        "lovenseConnectionStatus"
+      );
+      const lovenseGetQrCodeButton =
+        document.getElementById("lovenseGetQrCode");
+      const lovenseApiSetupButton = document.getElementById("lovenseSubmit");
+      const lovenseQrHelpText = document.getElementById("qrHelpText");
+      const lovenseQrCode = document.getElementById("lovenseQrCode");
+      const appConnectionStatus = document.getElementById(
+        "appConnectionStatus"
+      );
+
+      const sendVibesButton = document.getElementById("sendVibes");
+
+      // IIFE to encapsulate the lovenseApp object
+      const lovenseApp = (function () {
+        let basicSdkInstance;
+        let readyStatus = false;
+        let connected = false;
+        let platform = "";
+        let apiToken = "";
+        let authToken = "";
+        let uid = "123456";
+        let uname = "";
+        let deviceInfo = {};
+        let toyList = [];
+        let qrcode;
+        const getAuthToken = async () => {
+          try {
+            if (!apiToken || !uid) {
+              throw new Error("invalid token or uid");
+            }
+            const { data: resData } = await axios.post(
+              "https://api.lovense-api.com/api/basicApi/getToken",
+              {
+                token: apiToken,
+                uid: uid,
+                uname: uname,
+              }
+            );
+            if (resData.code === 0) {
+              authToken = resData.data && resData.data.authToken;
+              return authToken;
+            } else {
+              throw new Error(resData.message);
+            }
+          } catch (e) {
+            alert(e.message);
+          }
+        };
+        const setUserVars = (_token, _platform, _username) => {
+          apiToken = _token ? _token : apiToken;
+          platform = _platform ? _platform : platform;
+          uname = _username ? _username : uname;
+        };
+
+        const getQrCode = async () => {
+          try {
+            if (!readyStatus) {
+              throw new Error("Invalid initialization");
+            }
+            const codeRes = await basicSdkInstance.getQrcode();
+            qrcode = codeRes.qrcodeUrl;
+            lovenseQrCode.src = qrcode;
+            lovenseQrHelpText.classList.remove("hidden");
+          } catch (e) {
+            alert(e.message);
+          }
+        };
+
+        const init = async () => {
+          authToken = await getAuthToken();
+          try {
+            if (basicSdkInstance) {
+              basicSdkInstance.destroy();
+              basicSdkInstance = null;
+              readyStatus = false;
+              connected = false;
+            }
+            basicSdkInstance = new LovenseBasicSdk({
+              platform: platform,
+              authToken: authToken,
+              uid: uid,
+            });
+            basicSdkInstance.on("ready", (instance) => {
+              readyStatus = true;
+              lovenseConnectionStatus.innerText = "Connected";
+              lovenseApiSetupButton.disabled = false;
+            });
+            basicSdkInstance.on("sdkError", (data) => {
+              console.error("sdk error", data.code, data.message);
+              lovenseConnectionStatus.innerText = "Error";
+              lovenseApiSetupButton.disabled = false;
+            });
+            basicSdkInstance.on("toyInfoChange", (data) => {
+              toyList = data;
+              // console.dir("Toy List:");
+              // console.dir(toyList);
+            });
+            basicSdkInstance.on("deviceInfoChange", (data) => {
+              deviceInfo = data;
+              // console.dir("Device Info:");
+              // console.dir(deviceInfo);
+            });
+            basicSdkInstance.on("appStatusChange", (data) => {
+              connected = data;
+              appConnectionStatus.innerText = connected
+                ? "App Connected"
+                : "App Disconnected";
+              if (connected) {
+                lovenseConnectionSetup.classList.add("hidden");
+                sendVibesButton.disabled = false;
+                lovenseQrCode.src = "";
+              } else {
+                lovenseConnectionSetup.classList.remove("hidden");
+                sendVibesButton.disabled = true;
+              }
+            });
+          } catch (e) {
+            alert(e.message);
+          }
+        };
+
+        const sendVibes = async (intensity) => {
+          try {
+            await basicSdkInstance.sendToyCommand({
+              toyId: toyList[0].id,
+              vibrate: intensity,
+              time: 3,
+            });
+          } catch (e) {
+            alert(e.message);
+          }
+        };
+        return {
+          init,
+          setUserVars,
+          getQrCode,
+          sendVibes,
+        };
+      })();
+
+      lovenseApiSetupButton.addEventListener("click", async () => {
+        //disable button
+        lovenseApiSetupButton.disabled = true;
+        lovenseApp.setUserVars(
+          apiTokenField.value,
+          platformField.value,
+          usernameField.value
+        );
+        lovenseApp.init();
+      });
+      lovenseGetQrCodeButton.addEventListener("click", async () => {
+        lovenseApp.getQrCode();
+      });
+      sendVibesButton.addEventListener("click", async () => {
+        lovenseApp.sendVibes(10);
+      });
+    </script>
+  </body>
+</html>
