@@ -78,7 +78,6 @@ export const useLovense = ({
       });
       setSdkInstance(createdInstance);
       createdInstance.on("ready", (instance) => {
-        console.dir('test');
         setApiReadyStatus(true);
         onReady(instance);
       });
@@ -134,6 +133,7 @@ export const useLovense = ({
   );
 
   const stopVibes = useCallback(async () => {
+    if (!sdkInstance) return;
     try {
       await sdkInstance.stopToyAction();
     } catch (e) {
