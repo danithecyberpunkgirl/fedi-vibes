@@ -60,12 +60,13 @@ function App() {
   const [bpFoundDevice, setBpFoundDevice] = useState(false);
   const [selectedDevice, setSelectedDevice] = useState(null);
   useEffect(() => {
+    let clientRef = { client: null };
     (async function () {
-      const client = new Buttplug.ButtplugClient("FediVibes");
-      client.addListener("deviceadded", async (device) => {
+      clientRef.client = new Buttplug.ButtplugClient("FediVibes");
+      clientRef.client.addListener("deviceadded", async (device) => {
         console.log(`Device Connected: ${device.name}`);
         console.log("Client currently knows about these devices:");
-        client.devices.forEach((device) => console.log(`- ${device.name}`));
+        clientRef.client.devices.forEach((device) => console.log(`- ${device.name}`));
         // If we aren't working with a toy that vibrates, just return at this point.
         if (device.vibrateAttributes.length == 0) {
           console.dir("No vibration attributes found for device");
@@ -74,20 +75,26 @@ function App() {
         setBpFoundDevice(true);
         setSelectedDevice(device);
       });
-      client.addListener("deviceremoved", (device) => {
+      clientRef.client.addListener("deviceremoved", (device) => {
         console.log(`Device Removed: ${device.name}`);
         if (client.devices.length === 0) {
           setBpFoundDevice(false);
         }
       });
-      await client.connect(
+      await clientRef.client.connect(
         new Buttplug.ButtplugBrowserWebsocketClientConnector(
           envVars.buttplugServerUrl
         )
       );
-      await client.startScanning();
-      setBpClient(client);
+      await clientRef.client.startScanning();
+      setBpClient(clientRef.client);
     })();
+    return () => {
+      if (clientRef?.connected) {
+        clientRef?.client?.stopScanning();
+        clientRef?.client?.disconnect();
+      }
+    }
   }, []);
 
   const handleSendVibes = async () => {
