@@ -2,17 +2,31 @@ import { useEffect, useState } from "react";
 import { useLovense } from "./useLovense";
 import * as Sharkey from "misskey-js";
 import "./App.css";
+import { useLoopingTimer } from "./useLoopingTimer";
+
+const envVars = {
+  envApiToken: import.meta.env.VITE_LOVENSE_API_TOKEN,
+  envPlatform: import.meta.env.VITE_LOVENSE_APPID,
+  envUsername: import.meta.env.VITE_LOVENSE_USERNAME,
+  envTransfemToken: import.meta.env.VITE_TRANSFEM_SOCIAL_API_TOKEN,
+};
+
+// const notifTypes = [
+//   "reaction",
+//   "reply",
+//   "followRequestAccepted",
+//   "follow",
+//   "pollEnded",
+//   "mention",
+//   "renote",
+//   "achievementEarned",
+// ];
 
 function App() {
-  const [lovenseApiToken, setLovenseApiToken] = useState(
-    import.meta.env.VITE_LOVENSE_API_TOKEN
-  );
-  const [lovensePlatform, setLovensePlatform] = useState(
-    import.meta.env.VITE_LOVENSE_APPID
-  );
-  const [lovenseUsername, setLovenseUsername] = useState(
-    import.meta.env.VITE_LOVENSE_USERNAME
-  );
+  const [dt] = useLoopingTimer();
+  const [lovenseApiToken, setLovenseApiToken] = useState(envVars.envApiToken);
+  const [lovensePlatform, setLovensePlatform] = useState(envVars.envPlatform);
+  const [lovenseUsername, setLovenseUsername] = useState(envVars.envUsername);
   const [lovenseLoading, setLovenseLoading] = useState(false);
   const {
     initLovense,
@@ -26,41 +40,62 @@ function App() {
     qrCodeUrl,
     instance,
   } = useLovense({
-    onAuthSuccess: () => {},
     onReady: () => {
       setLovenseLoading(false);
     },
     onError: () => {
       setLovenseLoading(false);
     },
-    onToyInfo: () => {},
-    onDeviceInfo: () => {},
     onConnectionChange: () => {
       setLovenseLoading(false);
     },
   });
 
-  const [sharkeyApi, setSharkeyApi] = useState(null);
-  const [notifications, setNotifications] = useState([]);
+  const [sharkeyStream, setSharkeyStream] = useState(null);
+  // const [notifications, setNotifications] = useState([]);
+  const [newNotifiations, setNewNotifications] = useState([]);
   const [vibeTimer, setVibeTimer] = useState(0);
-  const [notifPollingCooldown, setNotifPollingCooldown] = useState(0);
+  const [vibing, setVibing] = useState(false);
+
   useEffect(() => {
-    // A whole bunch of bullshit I tried to get streaming to work
-    // const stream = new Sharkey.Stream('https://transfem.social', { token: import.meta.env.VITE_TRANSFEM_SOCIAL_API_TOKEN });
-    // const mainChannel = stream.useChannel('main');
-    // mainChannel.on('notification', notification => {
-    //   console.log('notification received', notification);
+    const stream = new Sharkey.Stream("https://transfem.social", {
+      token: envVars.envTransfemToken,
+    });
+    const mainChannel = stream.useChannel("main");
+    mainChannel.on("notification", (notification) => {
+      setNewNotifications((prev) => {
+        if (prev.findIndex((n) => n.id === notification.id) > -1) {
+          return prev;
+        }
+        return [...prev, notification]
+      });
+    });
+
+    //temp testing with other's posts instead of notifications
+    // const homeChannel = stream.useChannel("localTimeline");
+    // homeChannel.on("note", (note) => {
+    //   setNewNotifications((prev) => {
+    //     if (prev.findIndex((n) => n.id === note.id) > -1) {
+    //       return prev;
+    //     }
+    //     return [...prev, note]
+    //   });
     // });
-    // mainChannel.on('_connected_', () => {
-    //   console.dir('connected');
-    // });
-    setSharkeyApi(
-      new Sharkey.api.APIClient({
-        origin: "https://transfem.social",
-        credential: import.meta.env.VITE_TRANSFEM_SOCIAL_API_TOKEN,
-      })
-    );
+    setSharkeyStream(stream);
   }, []);
+  useEffect(() => {
+    console.dir(sharkeyStream?.state);
+  }, [sharkeyStream?.state]);
+
+  useEffect(() => {
+    if (newNotifiations.length > 0) {
+      // setNotifications((prev) => [...prev, ...newNotifiations]);
+      setVibeTimer(vibeTimer + newNotifiations.length);
+      setNewNotifications([]);
+    } else if (vibeTimer > 0) {
+      setVibeTimer(vibeTimer - 1);
+    }
+  }, [dt]);
 
   const handleInitLovense = () => {
     setLovenseLoading(true);
@@ -70,71 +105,24 @@ function App() {
     getQrCode();
   };
   const handleSendVibes = () => {
-    sendVibes(10);
+    setVibing(true);
+    sendVibes && sendVibes(10);
   };
   const handleStopVibes = () => {
+    setVibing(false);
     stopVibes && stopVibes();
   };
 
-  const [requestingNotifs, setRequestingNotifs] = useState(false);
-  const pollNotifications = () => {
-    const limit = 10;
-    setRequestingNotifs(true);
-    sharkeyApi
-      .request("i/notifications", {
-        limit: limit,
-      })
-      .then((newNotifications) => {
-        const shiftedIndex =
-          notifications.length > 0
-            ? newNotifications.findIndex((notif) => {
-                return notif.id === notifications?.[0]?.id;
-              })
-            : 0;
-        if (shiftedIndex > 0) {
-          console.dir(`${shiftedIndex} notifications received`);
-        }
-        if (shiftedIndex === -1) {
-          console.dir("rate limited");
-          if (vibeTimer <= 0) {
-            handleSendVibes();
-          }
-          setVibeTimer(vibeTimer + limit);
-        } else if (shiftedIndex > 0) {
-          if (vibeTimer <= 0) {
-            handleSendVibes();
-          }
-          setVibeTimer(vibeTimer + shiftedIndex);
-        }
-        setNotifications(newNotifications);
-        setRequestingNotifs(false);
-      });
-  };
-
   useEffect(() => {
-    if (vibeTimer <= 0) {
-      setVibeTimer(0);
-      handleStopVibes();
-    } else {
-      const timeoutRef = setTimeout(() => {
-        setVibeTimer(vibeTimer - 1);
-      }, 1000);
-      return () => clearTimeout(timeoutRef);
+    if (connected) {
+      if (!vibing && vibeTimer > 0) {
+        handleSendVibes();
+      } else if (vibing && vibeTimer === 0) {
+        handleStopVibes();
+      }
     }
   }, [vibeTimer]);
 
-  useEffect(() => {
-    const timeoutRef = setTimeout(() => {
-      setNotifPollingCooldown((notifPollingCooldown + 1) % 5);
-    }, 1000);
-    return () => clearTimeout(timeoutRef);
-  }, [notifPollingCooldown]);
-  useEffect(() => {
-    if (sharkeyApi && notifPollingCooldown === 0) {
-      setNotifPollingCooldown((notifPollingCooldown + 1) % 5);
-      pollNotifications();
-    }
-  }, [notifPollingCooldown, pollNotifications, sharkeyApi]);
   return (
     <div className="appWrapper">
       <div className={!connected ? "flex column" : "hidden"}>

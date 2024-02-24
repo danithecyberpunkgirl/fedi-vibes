@@ -2,12 +2,12 @@ import { useState, useCallback } from "react";
 import axios from "axios";
 
 export const useLovense = ({
-  onAuthSuccess,
-  onReady,
-  onError,
-  onToyInfo,
-  onDeviceInfo,
-  onConnectionChange,
+  onAuthSuccess = () => {},
+  onReady = () => {},
+  onError = () => {},
+  onToyInfo = () => {},
+  onDeviceInfo = () => {},
+  onConnectionChange = () => {},
 }) => {
   let [sdkInstance, setSdkInstance] = useState();
 
