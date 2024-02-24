@@ -4,6 +4,24 @@
   justify-content: center;
   height: 100vh;
 }
+/* utils */
+
+.hidden {
+  display: none;
+}
+
+/* margin */
+.m {
+  margin: 16px;
+}
+.mx {
+  margin-left: 16px;
+  margin-right: 16px;
+}
+.my {
+  margin-top: 16px;
+  margin-bottom: 16px;
+}
 .mb {
   margin-bottom: 16px;
 }
@@ -16,15 +34,69 @@
 .mt {
   margin-top: 16px;
 }
+
+/* padding */
+.p {
+  padding: 16px;
+}
+.px {
+  padding-left: 16px;
+  padding-right: 16px;
+}
+.py {
+  padding-top: 16px;
+  padding-bottom: 16px;
+}
+.pb {
+  padding-bottom: 16px;
+}
+.pl {
+  padding-left: 16px;
+}
+.pr {
+  padding-right: 16px;
+}
+.pt {
+  padding-top: 16px;
+}
+
+/* flexbox */
+.flex {
+  display: flex;
+}
 .column {
   flex-direction: column;
 }
 .row {
   flex-direction: row;
 }
-.flex {
-  display: flex;
+.justify-center {
+  justify-content: center;
 }
-.hidden {
-  display: none;
+.align-center {
+  align-items: center;
+}
+.align-start {
+  align-items: flex-start;
+}
+.align-end {
+  align-items: flex-end;
+}
+.justify-start {
+  justify-content: flex-start;
+}
+.justify-end {
+  justify-content: flex-end;
+}
+.align-space-between {
+  align-content: space-between;
+}
+.align-space-around {
+  align-content: space-around;
+}
+.justify-space-between {
+  justify-content: space-between;
+}
+.justify-space-around {
+  justify-content: space-around;
 }

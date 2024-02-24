@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
-import * as Sharkey from "misskey-js";
-import * as Buttplug from "buttplug";
 import { useLoopingTimer } from "./useLoopingTimer";
+import { useSharkey } from "./useSharkey";
+import { useButtplug } from "./useButtplug";
 import "./App.css";
 
 const envVars = {
@@ -17,132 +17,179 @@ const envVars = {
 //   "pollEnded",
 //   "mention",
 //   "renote",
+//   "quote",
 //   "achievementEarned",
 // ];
 
+// const notifShape = {
+//   id: "asdf",
+//   note: { id: "asdfasdf", text: "asdfasdf" },
+//   user: { id: "userId", username: "username" },
+// };
+
+const defaultNotifSettings = {
+  reaction: {
+    vibeIndex: "all",
+    vibeIntensity: 1.0,
+    secondsPerNotification: 0.5,
+  },
+  follow: {
+    vibeIndex: "all",
+    vibeIntensity: 1.0,
+    secondsPerNotification: 5,
+  },
+  mention: {
+    vibeIndex: "all",
+    vibeIntensity: 0.8,
+    secondsPerNotification: 1,
+  },
+  renote: {
+    vibeIndex: "all",
+    vibeIntensity: 1.0,
+    secondsPerNotification: 1,
+  },
+  reply: {
+    vibeIndex: "all",
+    vibeIntensity: 1.0,
+    secondsPerNotification: 2,
+    fallbackType: "renote",
+    minCharsToCount: 80,
+  },
+  quote: {
+    vibeIndex: "all",
+    vibeIntensity: 1.0,
+    secondsPerNotification: 3,
+    fallbackType: "renote",
+    minCharsToCount: 80,
+  },
+  default: {
+    vibeIndex: "all",
+    vibeIntensity: 0.1,
+    secondsPerNotification: 0.5,
+  },
+};
+
+const spamSettings = {
+  sameUserInLastTenNotifsForSpamFlag: 8,
+  spammerCooldown: 10,
+};
+
+const spamCooldown = {
+  userId: { timer: 10, multiplier: 1 },
+};
+
 function App() {
   const [dt] = useLoopingTimer();
-  const [vibeTimer, setVibeTimer] = useState(0);
-  const [vibing, setVibing] = useState(false);
+  const [notificationsLinked, setNotificationsLinked] = useState(true);
+  const [settings, setSettings] = useState(defaultNotifSettings);
+  const [spamCooldowns, setSpamCooldowns] = useState({});
 
-  const [sharkeyStream, setSharkeyStream] = useState(null);
-  const [sharkeyConnected, setSharkeyConnected] = useState(false);
-  const [notifications, setNotifications] = useState([]);
-  const [newNotifiations, setNewNotifications] = useState([]);
+  const {
+    sharkeyConnected,
+    notifications,
+    clearNotifications,
+    oldNotifications,
+    setOldNotifications,
+  } = useSharkey(envVars.envTransfemToken);
+
+  const {
+    bpClient,
+    bpFoundDevice,
+    devices,
+    motorState,
+    setMotorState,
+    selectedDevice,
+    setSelectedDevice,
+    handleStopVibes,
+  } = useButtplug(dt, envVars.buttplugServerUrl);
+
   useEffect(() => {
-    const stream = new Sharkey.Stream("https://transfem.social", {
-      token: envVars.envTransfemToken,
-    });
-    const mainChannel = stream.useChannel("main");
-    mainChannel.on("notification", (notification) => {
-      setNewNotifications((prev) => {
-        if (prev.findIndex((n) => n.id === notification.id) > -1) {
-          return prev;
-        }
-        return [...prev, notification];
-      });
-    });
-
-    //temp testing with other's posts instead of notifications
-    // const homeChannel = stream.useChannel("localTimeline");
-    // homeChannel.on("note", (note) => {
-    //   setNewNotifications((prev) => {
-    //     if (prev.findIndex((n) => n.id === note.id) > -1) {
-    //       return prev;
-    //     }
-    //     return [...prev, note]
-    //   });
-    // });
-    setSharkeyStream(stream);
-  }, []);
-
-  const [bpClient, setBpClient] = useState(null);
-  const [bpFoundDevice, setBpFoundDevice] = useState(false);
-  const [selectedDevice, setSelectedDevice] = useState(null);
-  useEffect(() => {
-    let clientRef = { client: null };
-    (async function () {
-      clientRef.client = new Buttplug.ButtplugClient("FediVibes");
-      clientRef.client.addListener("deviceadded", async (device) => {
-        console.log(`Device Connected: ${device.name}`);
-        console.log("Client currently knows about these devices:");
-        clientRef.client.devices.forEach((device) => console.log(`- ${device.name}`));
-        // If we aren't working with a toy that vibrates, just return at this point.
-        if (device.vibrateAttributes.length == 0) {
-          console.dir("No vibration attributes found for device");
-          return;
-        }
-        setBpFoundDevice(true);
-        setSelectedDevice(device);
-      });
-      clientRef.client.addListener("deviceremoved", (device) => {
-        console.log(`Device Removed: ${device.name}`);
-        if (client.devices.length === 0) {
-          setBpFoundDevice(false);
-        }
-      });
-      await clientRef.client.connect(
-        new Buttplug.ButtplugBrowserWebsocketClientConnector(
-          envVars.buttplugServerUrl
+    if (notifications.length > 0 && notificationsLinked) {
+      setOldNotifications((prev) => [...prev, ...notifications]);
+      notifications
+        .filter(
+          (notif) =>
+            !(
+              spamCooldowns[notif.user.id] &&
+              spamCooldowns[notif.user.id].timer > 0
+            )
         )
-      );
-      await clientRef.client.startScanning();
-      setBpClient(clientRef.client);
-    })();
-    return () => {
-      if (clientRef?.connected) {
-        clientRef?.client?.stopScanning();
-        clientRef?.client?.disconnect();
-      }
-    }
-  }, []);
+        .forEach((notif) => {
+          //get the last 10 notifications in the oldNotifications array
+          let spamFlag = 0;
+          oldNotifications.slice(-10).forEach((oldNotif) => {
+            if (oldNotif.user.id === notif.user.id) {
+              spamFlag++;
+            }
+          });
+          if (spamFlag >= spamSettings.sameUserInLastTenNotifsForSpamFlag) {
+            spamCooldowns[notif.user.id] = {
+              timer: spamCooldowns[notif.user.id]
+                ? spamCooldowns[notif.user.id].multiplier *
+                  spamSettings.spammerCooldown
+                : spamSettings.spammerCooldown,
+              multiplier: Math.min(
+                5,
+                spamCooldowns[notif.user.id]
+                  ? spamCooldowns[notif.user.id].multiplier + 1
+                  : 1
+              ),
+            };
+            return;
+          }
 
-  const handleSendVibes = async () => {
-    if (vibing) return;
-    // how to count vibe motors and send seperate intensities
-    // var vibratorCount = device.AllowedMessages[vibrateType].FeatureCount;
-    // await device.SendVibrateCmd(new [] { 1.0, 0.0 });
-    try {
-      //ButtplugClientDevice
-      await selectedDevice.vibrate(1.0);
-      setVibing(true);
-    } catch (e) {
-      console.log(e);
-    }
-  };
-  const handleStopVibes = async () => {
-    if (!vibing) return;
-    setVibing(false);
-    await selectedDevice.stop();
-  };
-
-  useEffect(() => {
-    if (sharkeyStream?.state === "connected") {
-      setSharkeyConnected(true);
+          let updateSettings = settings.default;
+          if (settings[notif.type] !== undefined) {
+            updateSettings = settings[notif.type];
+          }
+          if (
+            updateSettings.fallbackType &&
+            notif.note.text.length < updateSettings.minCharsToCount
+          ) {
+            updateSettings = settings[updateSettings.fallbackType]
+              ? settings[updateSettings.fallbackType]
+              : settings.default;
+          }
+          if (updateSettings.vibeIndex === "all") {
+            motorState.forEach((motor) => {
+              motor.timer = motor.timer + updateSettings.secondsPerNotification;
+              motor.intensity =
+                updateSettings.vibeIntensity > motor.intensity
+                  ? updateSettings.vibeIntensity
+                  : motor.intensity;
+            });
+          } else {
+            motorState[updateSettings.vibeIndex].timer =
+              motorState[updateSettings.vibeIndex].timer +
+              updateSettings.secondsPerNotification;
+            motorState[updateSettings.vibeIndex].intensity =
+              updateSettings.vibeIntensity >
+              motorState[updateSettings.vibeIndex].intensity
+                ? updateSettings.vibeIntensity
+                : motorState[updateSettings.vibeIndex].intensity;
+          }
+        });
+      setMotorState(motorState);
+      clearNotifications();
     } else {
-      setSharkeyConnected(false);
+      motorState.forEach((motor) => {
+        if (motor.timer > 0) {
+          motor.timer = Math.max(0, motor.timer - 1);
+        }
+      });
+      setMotorState(motorState);
     }
-  }, [sharkeyStream?.state]);
-
-  useEffect(() => {
-    if (newNotifiations.length > 0) {
-      // setNotifications((prev) => [...prev, ...newNotifiations]);
-      setVibeTimer(vibeTimer + newNotifiations.length);
-      setNewNotifications([]);
-    } else if (vibeTimer > 0) {
-      setVibeTimer(vibeTimer - 1);
+    let shouldUpdateSpamCooldowns = false;
+    Object.values(spamCooldowns).forEach((cooldown) => {
+      if (cooldown.timer > 0) {
+        shouldUpdateSpamCooldowns = true;
+        cooldown.timer = Math.max(0, cooldown.timer - 1);
+      }
+    });
+    if (shouldUpdateSpamCooldowns) {
+      setSpamCooldowns(spamCooldowns);
     }
   }, [dt]);
-
-  useEffect(() => {
-    if (bpClient?.connected) {
-      if (!vibing && vibeTimer > 0) {
-        handleSendVibes();
-      } else if (vibing && vibeTimer === 0) {
-        handleStopVibes();
-      }
-    }
-  }, [vibeTimer]);
 
   return (
     <div className="appWrapper">
@@ -157,16 +204,29 @@ function App() {
             ? "Sharkey Connected"
             : "Sharkey Disconnected"}
         </div>
+        <div id="notificationsLinked" className="mt">
+          {notificationsLinked === true
+            ? "Notifications == Vibes"
+            : "Notifications =/= Vibes"}
+        </div>
         <div className="mt">
           <button
-            id="sendVibes"
+            id="sendVibesButton"
             disabled={!bpClient?.connected || !bpFoundDevice}
-            onClick={handleSendVibes}
+            onClick={() =>
+              setMotorState(
+                motorState.map(() => ({
+                  intensity: 0.1,
+                  timer: 999,
+                  vibing: false,
+                }))
+              )
+            }
           >
             Send Vibes
           </button>
           <button
-            id="stopVibes"
+            id="stopVibesButton"
             className="ml"
             disabled={!bpClient?.connected || !bpFoundDevice}
             onClick={handleStopVibes}
@@ -174,7 +234,28 @@ function App() {
             Stop Vibes
           </button>
         </div>
-        <div className="mt">{vibeTimer}</div>
+        <div className="mt">
+          <button
+            id="linkVibesButton"
+            disabled={!bpClient?.connected || !bpFoundDevice}
+            onClick={() => setNotificationsLinked(true)}
+          >
+            Link Notifs
+          </button>
+          <button
+            id="unlinkVibesButton"
+            className="ml"
+            disabled={!bpClient?.connected || !bpFoundDevice}
+            onClick={() => setNotificationsLinked(false)}
+          >
+            Unlink Notifs
+          </button>
+        </div>
+        {motorState.map((motor, i) => (
+          <div key={i} className="mt">
+            {motor.timer}
+          </div>
+        ))}
       </div>
     </div>
   );
