@@ -1,13 +1,11 @@
 import { useEffect, useState } from "react";
-import { useLovense } from "./useLovense";
 import * as Sharkey from "misskey-js";
-import "./App.css";
+import * as Buttplug from "buttplug";
 import { useLoopingTimer } from "./useLoopingTimer";
+import "./App.css";
 
 const envVars = {
-  envApiToken: import.meta.env.VITE_LOVENSE_API_TOKEN,
-  envPlatform: import.meta.env.VITE_LOVENSE_APPID,
-  envUsername: import.meta.env.VITE_LOVENSE_USERNAME,
+  buttplugServerUrl: import.meta.env.VITE_BUTTPLUG_SERVER_URL,
   envTransfemToken: import.meta.env.VITE_TRANSFEM_SOCIAL_API_TOKEN,
 };
 
@@ -24,39 +22,13 @@ const envVars = {
 
 function App() {
   const [dt] = useLoopingTimer();
-  const [lovenseApiToken, setLovenseApiToken] = useState(envVars.envApiToken);
-  const [lovensePlatform, setLovensePlatform] = useState(envVars.envPlatform);
-  const [lovenseUsername, setLovenseUsername] = useState(envVars.envUsername);
-  const [lovenseLoading, setLovenseLoading] = useState(false);
-  const {
-    initLovense,
-    getQrCode,
-    sendVibes,
-    stopVibes,
-    apiReadyStatus,
-    connected,
-    deviceInfo,
-    toyList,
-    qrCodeUrl,
-    instance,
-  } = useLovense({
-    onReady: () => {
-      setLovenseLoading(false);
-    },
-    onError: () => {
-      setLovenseLoading(false);
-    },
-    onConnectionChange: () => {
-      setLovenseLoading(false);
-    },
-  });
-
-  const [sharkeyStream, setSharkeyStream] = useState(null);
-  // const [notifications, setNotifications] = useState([]);
-  const [newNotifiations, setNewNotifications] = useState([]);
   const [vibeTimer, setVibeTimer] = useState(0);
   const [vibing, setVibing] = useState(false);
 
+  const [sharkeyStream, setSharkeyStream] = useState(null);
+  const [sharkeyConnected, setSharkeyConnected] = useState(false);
+  const [notifications, setNotifications] = useState([]);
+  const [newNotifiations, setNewNotifications] = useState([]);
   useEffect(() => {
     const stream = new Sharkey.Stream("https://transfem.social", {
       token: envVars.envTransfemToken,
@@ -67,7 +39,7 @@ function App() {
         if (prev.findIndex((n) => n.id === notification.id) > -1) {
           return prev;
         }
-        return [...prev, notification]
+        return [...prev, notification];
       });
     });
 
@@ -83,8 +55,66 @@ function App() {
     // });
     setSharkeyStream(stream);
   }, []);
+
+  const [bpClient, setBpClient] = useState(null);
+  const [bpFoundDevice, setBpFoundDevice] = useState(false);
+  const [selectedDevice, setSelectedDevice] = useState(null);
   useEffect(() => {
-    console.dir(sharkeyStream?.state);
+    (async function () {
+      const client = new Buttplug.ButtplugClient("FediVibes");
+      client.addListener("deviceadded", async (device) => {
+        console.log(`Device Connected: ${device.name}`);
+        console.log("Client currently knows about these devices:");
+        client.devices.forEach((device) => console.log(`- ${device.name}`));
+        // If we aren't working with a toy that vibrates, just return at this point.
+        if (device.vibrateAttributes.length == 0) {
+          console.dir("No vibration attributes found for device");
+          return;
+        }
+        setBpFoundDevice(true);
+        setSelectedDevice(device);
+      });
+      client.addListener("deviceremoved", (device) => {
+        console.log(`Device Removed: ${device.name}`);
+        if (client.devices.length === 0) {
+          setBpFoundDevice(false);
+        }
+      });
+      await client.connect(
+        new Buttplug.ButtplugBrowserWebsocketClientConnector(
+          envVars.buttplugServerUrl
+        )
+      );
+      await client.startScanning();
+      setBpClient(client);
+    })();
+  }, []);
+
+  const handleSendVibes = async () => {
+    if (vibing) return;
+    // how to count vibe motors and send seperate intensities
+    // var vibratorCount = device.AllowedMessages[vibrateType].FeatureCount;
+    // await device.SendVibrateCmd(new [] { 1.0, 0.0 });
+    try {
+      //ButtplugClientDevice
+      await selectedDevice.vibrate(1.0);
+      setVibing(true);
+    } catch (e) {
+      console.log(e);
+    }
+  };
+  const handleStopVibes = async () => {
+    if (!vibing) return;
+    setVibing(false);
+    await selectedDevice.stop();
+  };
+
+  useEffect(() => {
+    if (sharkeyStream?.state === "connected") {
+      setSharkeyConnected(true);
+    } else {
+      setSharkeyConnected(false);
+    }
   }, [sharkeyStream?.state]);
 
   useEffect(() => {
@@ -97,24 +127,8 @@ function App() {
     }
   }, [dt]);
 
-  const handleInitLovense = () => {
-    setLovenseLoading(true);
-    initLovense(lovenseApiToken, lovensePlatform, lovenseUsername);
-  };
-  const handleGetQrCode = () => {
-    getQrCode();
-  };
-  const handleSendVibes = () => {
-    setVibing(true);
-    sendVibes && sendVibes(10);
-  };
-  const handleStopVibes = () => {
-    setVibing(false);
-    stopVibes && stopVibes();
-  };
-
   useEffect(() => {
-    if (connected) {
+    if (bpClient?.connected) {
       if (!vibing && vibeTimer > 0) {
         handleSendVibes();
       } else if (vibing && vibeTimer === 0) {
@@ -125,77 +139,35 @@ function App() {
 
   return (
     <div className="appWrapper">
-      <div className={!connected ? "flex column" : "hidden"}>
-        <div className="flex column">
-          <input
-            id="lovenseApiToken"
-            className="mb"
-            type="text"
-            value={lovenseApiToken}
-            onChange={(e) => setLovenseApiToken(e.target.value)}
-            placeholder="lovense developer token"
-          />
-          <input
-            id="lovensePlatformId"
-            className="mb"
-            type="text"
-            value={lovensePlatform}
-            onChange={(e) => setLovensePlatform(e.target.value)}
-            placeholder="lovense platform name"
-          />
-          <input
-            id="lovenseUsername"
-            className="mb"
-            type="text"
-            value={lovenseUsername}
-            onChange={(e) => setLovenseUsername(e.target.value)}
-            placeholder="lovense username"
-          />
-          <div className="flex row mb">
-            <button
-              id="lovenseInitApi"
-              disabled={lovenseLoading}
-              onClick={handleInitLovense}
-            >
-              Init Lovense API
-            </button>
-            <div className="ml">{apiReadyStatus ? "✔️" : "?"}</div>
-          </div>
-          <button
-            id="lovenseGetQrCode"
-            disabled={!apiReadyStatus}
-            onClick={handleGetQrCode}
-          >
-            Get QR Code
-          </button>
-          <div id="qrHelpText" className="hidden">
-            Scan QR Code from Lovense App
-          </div>
-          <p>
-            {qrCodeUrl && <img id="lovenseQrCode" src={qrCodeUrl} alt="" />}
-          </p>
-        </div>
-      </div>
       <div id="infoBox">
         <div id="appConnectionStatus" className="mt">
-          {connected === true ? "Connected" : "Not Connected"}
+          {bpClient?.connected === true
+            ? "Vibe Connected"
+            : "Vibe Disconnected"}
         </div>
-        <button
-          id="sendVibes"
-          disabled={!connected || lovenseLoading}
-          onClick={handleSendVibes}
-        >
-          Send Vibes
-        </button>
-        <button
-          id="stopVibes"
-          className="ml"
-          disabled={!connected || lovenseLoading}
-          onClick={handleStopVibes}
-        >
-          Stop Vibes
-        </button>
-        <div>{vibeTimer}</div>
+        <div id="sharkeyConnectionStatus" className="mt">
+          {sharkeyConnected === true
+            ? "Sharkey Connected"
+            : "Sharkey Disconnected"}
+        </div>
+        <div className="mt">
+          <button
+            id="sendVibes"
+            disabled={!bpClient?.connected || !bpFoundDevice}
+            onClick={handleSendVibes}
+          >
+            Send Vibes
+          </button>
+          <button
+            id="stopVibes"
+            className="ml"
+            disabled={!bpClient?.connected || !bpFoundDevice}
+            onClick={handleStopVibes}
+          >
+            Stop Vibes
+          </button>
+        </div>
+        <div className="mt">{vibeTimer}</div>
       </div>
     </div>
   );
