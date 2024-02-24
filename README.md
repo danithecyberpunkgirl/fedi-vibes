@@ -1,5 +1,5 @@
 # FediVibes
-A very dumb shitpost of an idea to turn activitypub notifications from transfem.social into vibrations on a lovense sex toy.
+A very dumb shitpost of an idea to turn activitypub notifications from transfem.social into vibrations on a sex toy.
 
 ### Running
 This project uses [buttplug.io](https://docs.buttplug.io) and [Intiface](https://docs.intiface.com/docs/intiface-central/quickstart/) to control your toy.
