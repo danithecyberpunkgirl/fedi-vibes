@@ -88,15 +88,41 @@
 .justify-end {
   justify-content: flex-end;
 }
-.align-space-between {
+.align-between {
   align-content: space-between;
 }
-.align-space-around {
+.align-around {
   align-content: space-around;
 }
-.justify-space-between {
+.justify-between {
   justify-content: space-between;
 }
-.justify-space-around {
+.justify-around {
   justify-content: space-around;
+}
+
+/* widths */
+.w-full {
+  width: 100%;
+}
+.w-50 {
+  width: 50%;
+}
+.w-25 {
+  width: 25%;
+}
+.w-75 {
+  width: 75%;
+}
+.w-small {
+  width: 64px;
+}
+.w-medium {
+  width: 128px;
+}
+.w-large {
+  width: 256px;
+}
+.w-xlarge {
+  width: 512px;
 }

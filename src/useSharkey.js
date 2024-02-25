@@ -59,6 +59,7 @@ export const useSharkey = (apiToken) => {
     sharkeyStream,
     sharkeyConnected,
     notifications,
+    setNotifications,
     clearNotifications,
     oldNotifications,
     setOldNotifications,

@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useLoopingTimer } from "./useLoopingTimer";
 import { useSharkey } from "./useSharkey";
 import { useButtplug } from "./useButtplug";
+import { SettingsComponent } from "./Settings";
 import "./App.css";
 
 const envVars = {
@@ -29,8 +30,8 @@ const envVars = {
 
 const defaultNotifSettings = {
   reaction: {
-    vibeIndex: "all",
-    vibeIntensity: 1.0,
+    vibeIndex: 1,
+    vibeIntensity: 0.5,
     secondsPerNotification: 0.5,
   },
   follow: {
@@ -39,14 +40,14 @@ const defaultNotifSettings = {
     secondsPerNotification: 5,
   },
   mention: {
-    vibeIndex: "all",
-    vibeIntensity: 0.8,
+    vibeIndex: 0,
+    vibeIntensity: 0.6,
     secondsPerNotification: 1,
   },
   renote: {
-    vibeIndex: "all",
-    vibeIntensity: 1.0,
-    secondsPerNotification: 1,
+    vibeIndex: 0,
+    vibeIntensity: 0.5,
+    secondsPerNotification: 2,
   },
   reply: {
     vibeIndex: "all",
@@ -63,15 +64,16 @@ const defaultNotifSettings = {
     minCharsToCount: 80,
   },
   default: {
-    vibeIndex: "all",
+    vibeIndex: 1,
     vibeIntensity: 0.1,
     secondsPerNotification: 0.5,
   },
 };
 
-const spamSettings = {
-  sameUserInLastTenNotifsForSpamFlag: 8,
+const globalSettings = {
+  sameUserInLastTenNotifsForSpamFlag: 7,
   spammerCooldown: 10,
+  maxIncreasePerTick: 5
 };
 
 const spamCooldown = {
@@ -80,13 +82,14 @@ const spamCooldown = {
 
 function App() {
   const [dt] = useLoopingTimer();
-  const [notificationsLinked, setNotificationsLinked] = useState(true);
+  const [notificationsLinked, setNotificationsLinked] = useState(false);
   const [settings, setSettings] = useState(defaultNotifSettings);
   const [spamCooldowns, setSpamCooldowns] = useState({});
 
   const {
     sharkeyConnected,
     notifications,
+    setNotifications,
     clearNotifications,
     oldNotifications,
     setOldNotifications,
@@ -106,6 +109,7 @@ function App() {
   useEffect(() => {
     if (notifications.length > 0 && notificationsLinked) {
       setOldNotifications((prev) => [...prev, ...notifications]);
+      const maxTimerIncreaseForTick = motorState.map(motor => (motor.timer + globalSettings.maxIncreasePerTick));
       notifications
         .filter(
           (notif) =>
@@ -122,22 +126,19 @@ function App() {
               spamFlag++;
             }
           });
-          if (spamFlag >= spamSettings.sameUserInLastTenNotifsForSpamFlag) {
+          if (spamFlag >= globalSettings.sameUserInLastTenNotifsForSpamFlag) {
+            let spamUserObj = spamCooldowns[notif.user.id];
             spamCooldowns[notif.user.id] = {
-              timer: spamCooldowns[notif.user.id]
-                ? spamCooldowns[notif.user.id].multiplier *
-                  spamSettings.spammerCooldown
-                : spamSettings.spammerCooldown,
+              timer: spamUserObj
+                ? spamUserObj.multiplier * globalSettings.spammerCooldown
+                : globalSettings.spammerCooldown,
               multiplier: Math.min(
                 5,
-                spamCooldowns[notif.user.id]
-                  ? spamCooldowns[notif.user.id].multiplier + 1
-                  : 1
+                spamUserObj ? spamUserObj.multiplier + 1 : 1
               ),
             };
             return;
           }
-
           let updateSettings = settings.default;
           if (settings[notif.type] !== undefined) {
             updateSettings = settings[notif.type];
@@ -152,6 +153,7 @@ function App() {
           }
           if (updateSettings.vibeIndex === "all") {
             motorState.forEach((motor) => {
+              // console.dir(motor.intensity);
               motor.timer = motor.timer + updateSettings.secondsPerNotification;
               motor.intensity =
                 updateSettings.vibeIntensity > motor.intensity
@@ -159,16 +161,19 @@ function App() {
                   : motor.intensity;
             });
           } else {
-            motorState[updateSettings.vibeIndex].timer =
-              motorState[updateSettings.vibeIndex].timer +
-              updateSettings.secondsPerNotification;
-            motorState[updateSettings.vibeIndex].intensity =
-              updateSettings.vibeIntensity >
-              motorState[updateSettings.vibeIndex].intensity
+            let thisMotor = motorState[updateSettings.vibeIndex];
+            thisMotor.timer =
+              thisMotor.timer + updateSettings.secondsPerNotification;
+            thisMotor.intensity =
+              updateSettings.vibeIntensity > thisMotor.intensity
                 ? updateSettings.vibeIntensity
-                : motorState[updateSettings.vibeIndex].intensity;
+                : thisMotor.intensity;
+              console.dir(thisMotor.intensity);
           }
         });
+      motorState.forEach((motor, i) => {
+        motor.timer = Math.min(motor.timer, maxTimerIncreaseForTick[i]);
+      });
       setMotorState(motorState);
       clearNotifications();
     } else {
@@ -191,9 +196,27 @@ function App() {
     }
   }, [dt]);
 
+  const handleDummyNotif = () => {
+    setNotifications((prev) => [
+      ...prev,
+      {
+        id: `${Math.random()}`,
+        type: "renote",
+        note: {
+          id: "asdf",
+          text: "dummy",
+        },
+        user: {
+          id: "asdf",
+          username: 'testuser',
+        }
+      },
+    ]);
+  }
+
   return (
     <div className="appWrapper">
-      <div id="infoBox">
+      <div id="infoBox" className="mx align-start flex column">
         <div id="appConnectionStatus" className="mt">
           {bpClient?.connected === true
             ? "Vibe Connected"
@@ -251,11 +274,42 @@ function App() {
             Unlink Notifs
           </button>
         </div>
+        <div className="mt">
+            <button
+              id="dummyNotifButton"
+              disabled={!sharkeyConnected}
+              onClick={handleDummyNotif}
+            >Send Dummy Notif</button>
+        </div>
         {motorState.map((motor, i) => (
           <div key={i} className="mt">
-            {motor.timer}
+            {`Motor ${i+1}: ${motor.timer}`}
           </div>
         ))}
+      </div>
+      <div id="settingsBox" className="mx pr">
+        <SettingsComponent 
+          settings={settings}
+          setSettings={setSettings}
+          motorState={motorState}
+          devices={devices}
+          selectedDevice={selectedDevice}
+          setSelectedDevice={setSelectedDevice}
+        />
+      </div>
+      <div id="notificationStream" className="notificationStream mx pl">
+        <div id="notificationStreamHeader" className="mt">
+          Notifications
+        </div>
+        <div id="notificationStreamBody" className="mt">
+          {oldNotifications.map((notif) => notif && (
+            <div key={notif.id} className="flex row justify-between">
+              <div className="mx">{notif.user.username}</div>
+              <div className="mx">{notif.type}</div>
+              <div className="mx">{notif?.note?.text}</div>
+            </div>
+          ))}
+        </div>
       </div>
     </div>
   );
