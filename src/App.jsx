@@ -114,6 +114,7 @@ function App() {
         .filter(
           (notif) =>
             !(
+              notif.user &&
               spamCooldowns[notif.user.id] &&
               spamCooldowns[notif.user.id].timer > 0
             )
@@ -122,13 +123,13 @@ function App() {
           //get the last 10 notifications in the oldNotifications array
           let spamFlag = 0;
           oldNotifications.slice(-10).forEach((oldNotif) => {
-            if (oldNotif.user.id === notif.user.id) {
+            if (oldNotif?.user?.id === notif?.user?.id) {
               spamFlag++;
             }
           });
           if (spamFlag >= globalSettings.sameUserInLastTenNotifsForSpamFlag) {
-            let spamUserObj = spamCooldowns[notif.user.id];
-            spamCooldowns[notif.user.id] = {
+            let spamUserObj = spamCooldowns[notif?.user?.id];
+            spamCooldowns[notif?.user?.id] = {
               timer: spamUserObj
                 ? spamUserObj.multiplier * globalSettings.spammerCooldown
                 : globalSettings.spammerCooldown,

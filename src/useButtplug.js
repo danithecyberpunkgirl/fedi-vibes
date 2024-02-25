@@ -41,7 +41,7 @@ export const useButtplug = (dt, serverUrl) => {
         });
         clientRef.client.addListener("deviceremoved", (device) => {
           console.log(`Device Removed: ${device.name}`);
-          if (client.devices.length === 0) {
+          if (clientRef?.client?.devices?.length === 0) {
             setBpFoundDevice(false);
           }
         });
