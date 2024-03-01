@@ -93,11 +93,12 @@ export const useButtplug = (dt, serverUrl) => {
       }
     });
     try {
-      const intensityArray = nextMotorState.map((motor) => motor.intensity);
-      if (device.vibrateAttributes?.length > 1) {
-        await selectedDevice.vibrate(intensityArray);
+      if (selectedDevice.vibrateAttributes?.length > 1) {
+        await selectedDevice.vibrate(
+          nextMotorState.map((motor) => motor.intensity)
+        );
       } else {
-        await selectedDevice.vibrate(Math.max(...intensityArray));
+        await selectedDevice.vibrate(nextMotorState[0].intensity);
       }
       setMotorState(nextMotorState);
     } catch (e) {
