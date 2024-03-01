@@ -6,6 +6,7 @@ export const useSharkey = (apiToken) => {
   const [sharkeyConnected, setSharkeyConnected] = useState(false);
   const [oldNotifications, setOldNotifications] = useState([]);
   const [notifications, setNotifications] = useState([]);
+  const [followerIds, setFollowerIds] = useState([]);
   useEffect(() => {
     const stream = new Sharkey.Stream("https://transfem.social", {
       token: apiToken,
@@ -32,16 +33,45 @@ export const useSharkey = (apiToken) => {
     setSharkeyStream(stream);
 
     // REST API constructor in case we need it
-    // const sharkeyApi = new Sharkey.api.APIClient({
-    //   origin: "https://transfem.social",
-    //   credential: import.meta.env.VITE_TRANSFEM_SOCIAL_API_TOKEN,
-    // });
-    // sharkeyApi
-    //   .request("i/notifications", { limit: 20 })
-    //   .then((newNotifications) => {
-    //     console.dir(newNotifications);
-    //   });
+    (async function () {
+      const sharkeyApi = new Sharkey.api.APIClient({
+        origin: "https://transfem.social",
+        credential: import.meta.env.VITE_TRANSFEM_SOCIAL_API_TOKEN,
+      });
+      let followerIdList = localStorage.getItem("followerIdList");
+      followerIdList = followerIdList ? JSON.parse(followerIdList) : [];
+      if (followerIdList.length === 0) {
+        let pageEndId = "";
+        let hasMoreFollowers = true;
+        let breaker = 0;
+        while (hasMoreFollowers && breaker < 2) {
+          try {
+            const followerPage = await sharkeyApi.request("users/followers", {
+              ...(pageEndId.length > 0 ? { untilId: pageEndId } : {}),
+              // untilId: "",
+              limit: 100,
+              userId: import.meta.env.VITE_TRANSFEM_SOCIAL_USER_ID,
+            });
+            if (followerPage.length > 0) {
+              const newFollowers = followerPage.map((follower) => follower.id);
+              pageEndId = followerPage[followerPage.length - 1].id;
+              followerIdList.push(...newFollowers);
+              hasMoreFollowers = followerPage.length === 100;
+            } else {
+              hasMoreFollowers = false;
+            }
+          } catch (e) {
+            console.error(e);
+          }
+          breaker++;
+        }
+        localStorage.setItem("followerIdList", JSON.stringify(followerIdList));
+      }
+      setFollowerIds(followerIdList);
+    })();
   }, []);
+
+  useEffect(() => {}, []);
 
   useEffect(() => {
     if (sharkeyStream?.state === "connected") {
@@ -59,6 +89,7 @@ export const useSharkey = (apiToken) => {
     sharkeyStream,
     sharkeyConnected,
     notifications,
+    followerIds,
     setNotifications,
     clearNotifications,
     oldNotifications,

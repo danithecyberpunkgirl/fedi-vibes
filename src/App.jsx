@@ -52,7 +52,7 @@ const defaultNotifSettings = {
   reply: {
     vibeIndex: "all",
     vibeIntensity: 1.0,
-    secondsPerNotification: 2,
+    secondsPerNotification: 3,
     fallbackType: "renote",
     minCharsToCount: 80,
   },
@@ -71,8 +71,8 @@ const defaultNotifSettings = {
 };
 
 const globalSettings = {
-  sameUserInLastTenNotifsForSpamFlag: 7,
-  spammerCooldown: 10,
+  sameUserInLastTenNotifsForSpamFlag: 8,
+  spammerCooldown: 5,
   maxIncreasePerTick: 5
 };
 
@@ -89,6 +89,7 @@ function App() {
   const {
     sharkeyConnected,
     notifications,
+    followerIds,
     setNotifications,
     clearNotifications,
     oldNotifications,
@@ -140,13 +141,19 @@ function App() {
             };
             return;
           }
+          //prevent unfollow/refollow spam
+          if (notif.type === "follow") {
+            if (notif?.user?.id?.length > 0 && followerIds.includes(notif?.user?.id)) {
+              return;
+            }
+          }
           let updateSettings = settings.default;
           if (settings[notif.type] !== undefined) {
             updateSettings = settings[notif.type];
           }
           if (
             updateSettings.fallbackType &&
-            notif.note.text.length < updateSettings.minCharsToCount
+            notif?.note?.text?.length < updateSettings.minCharsToCount
           ) {
             updateSettings = settings[updateSettings.fallbackType]
               ? settings[updateSettings.fallbackType]
@@ -169,7 +176,6 @@ function App() {
               updateSettings.vibeIntensity > thisMotor.intensity
                 ? updateSettings.vibeIntensity
                 : thisMotor.intensity;
-              console.dir(thisMotor.intensity);
           }
         });
       motorState.forEach((motor, i) => {

@@ -93,9 +93,12 @@ export const useButtplug = (dt, serverUrl) => {
       }
     });
     try {
-      await selectedDevice.vibrate(
-        nextMotorState.map((motor) => motor.intensity)
-      );
+      const intensityArray = nextMotorState.map((motor) => motor.intensity);
+      if (device.vibrateAttributes?.length > 1) {
+        await selectedDevice.vibrate(intensityArray);
+      } else {
+        await selectedDevice.vibrate(Math.max(...intensityArray));
+      }
       setMotorState(nextMotorState);
     } catch (e) {
       console.error(e);
@@ -119,10 +122,12 @@ export const useButtplug = (dt, serverUrl) => {
     }
   }, [dt]);
 
+  const deviceList = bpClient?.connected && bpClient?.devices ? bpClient.devices : [];
+
   return {
     bpClient,
     bpFoundDevice,
-    devices: bpClient?.devices,
+    devices: deviceList,
     motorState,
     setMotorState,
     selectedDevice,
